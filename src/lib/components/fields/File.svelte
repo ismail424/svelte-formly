@@ -17,6 +17,9 @@
 			multiple = field.extra.multiple ? field.extra.multiple : null;
 			showPreview = field.extra.showPreview ? field.extra.showPreview : null;
 		}
+		if (field.value) {				
+			files = field.value as any[];
+		}
 	});
 
 	// Delete file.
