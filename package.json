@@ -44,6 +44,7 @@
   },
   "type": "module",
   "dependencies": {
+    "@ismail424/svelte-formly": "file:",
     "@picocss/pico": "^1.5.3",
     "bulma": "^0.9.4",
     "open-props": "^1.4.3",

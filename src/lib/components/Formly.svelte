@@ -179,7 +179,7 @@
 			</p>
 		</Error>
 	{:else}
-		<form bind:this={_formEl} on:submit|preventDefault={onSubmit} on:reset|preventDefault={onReset}>
+		<form name={form_name} bind:this={_formEl} on:submit|preventDefault={onSubmit} on:reset|preventDefault={onReset}>
 			{#each current_form.fields as field}
 				{#if field.prefix?.tag}
 					<Tag prefix={field.prefix}>
