@@ -1,6 +1,6 @@
 {
   "name": "@ismail424/svelte-formly",
-  "version": "2.0.5",
+  "version": "2.0.6",
   "author": "Kamal Sahmoud",
   "contributors": [
     "Kamal Sahmoud"
@@ -42,22 +42,13 @@
     "typescript": "^4.7.4",
     "vite": "^3.0.0"
   },
-  "exports": {
-    ".": {
-      "types": "./src/lib/index.ts",
-      "svelte": "./src/lib/index.ts",
-      "default": "./src/lib/index.ts"
-    }
-  },
-  "svelte": "./src/lib/index.ts",
-  "types": "./src/lib/index.ts",
   "type": "module",
   "dependencies": {
     "@ismail424/svelte-formly": "file:",
     "@picocss/pico": "^1.5.3",
     "bulma": "^0.9.4",
     "open-props": "^1.4.3",
-    "svelte-formly-light": "^0.0.7"
+    "svelte-formly-light": "^0.0.10"
   },
   "keywords": [
     "svelte",
