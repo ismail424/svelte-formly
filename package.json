@@ -1,6 +1,6 @@
 {
   "name": "@ismail424/svelte-formly",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "author": "Kamal Sahmoud",
   "contributors": [
     "Kamal Sahmoud"
@@ -10,6 +10,22 @@
     "url": "git+https://github.com/dyaliCode/svelte-formly.git"
   },
   "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "svelte": "./dist/index.js",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "svelte": "./dist/index.js",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
@@ -21,6 +37,9 @@
     "check:watch": "svelte-check --tsconfig ./tsconfig.json --watch",
     "lint": "prettier --check --plugin-search-dir=. . && eslint .",
     "format": "prettier --write --plugin-search-dir=. ."
+  },
+  "peerDependencies": {
+    "svelte": "^3.44.0 || ^4.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.22.2",
@@ -42,49 +61,21 @@
     "typescript": "^4.7.4",
     "vite": "^3.0.0"
   },
-  "type": "module",
   "dependencies": {
     "@ismail424/svelte-formly": "file:",
     "@picocss/pico": "^1.5.3",
     "bulma": "^0.9.4",
-    "open-props": "^1.4.3",
-    "svelte-formly-light": "^0.0.7"
+    "open-props": "^1.4.3"
   },
   "keywords": [
     "svelte",
     "sveltejs",
-    "svelte-v3",
-    "svelte-framework",
     "svelte-formly",
     "svelte-form",
-    "svelte-forms",
-    "svelte-form-validations",
-    "svelte-form-validation",
-    "svelte-form-validators",
-    "svelte-form-validator",
-    "svelte-formly-validations",
-    "svelte-formly-validation",
-    "svelte-formly-validators",
-    "svelte-formly-validator",
-    "svelte-validations",
-    "svelte-validation",
-    "svelte-validators",
-    "svelte-validator",
     "form",
     "forms",
     "formly",
-    "validations",
-    "validation",
-    "validators",
-    "validator"
+    "validations"
   ],
-  "description": "<p align=\"center\">   <img width=\"100%\" height=\"300\" src=\"./logo.png\" alt=\"Svelte Formly\" /> </p>",
-  "bugs": {
-    "url": "https://github.com/dyaliCode/svelte-formly/issues"
-  },
-  "homepage": "https://github.com/dyaliCode/svelte-formly#readme",
-  "main": "svelte.config.js",
-  "directories": {
-    "test": "tests"
-  }
+  "description": "A dynamic form library for Svelte with built-in validation"
 }
