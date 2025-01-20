@@ -119,7 +119,7 @@
                     <div class="infos">
                         <div class="flex flex-col gap-2">
                             <!-- Filename -->
-                            <div class="font-medium truncate" title={file.name}>
+                            <div class="flex items-center gap-1">
                                 <svg 
                                     class={`inline-block mr-1 opacity-${iconConfig.opacity * 100} ${iconConfig.size} ${iconConfig.additionalClasses}`} 
                                     viewBox="0 0 24 24" 
