@@ -20,6 +20,14 @@
     };
 
     onMount(() => {
+        try{
+            if (field.value) {
+                files = Array.isArray(field.value) ? field.value : [field.value];
+            }
+        } catch (e) {
+            console.error(e);
+        }
+        
         if (field.extra) {
             multiple = field.extra.multiple ? field.extra.multiple : null;
             showPreview = field.extra.showPreview ? field.extra.showPreview : null;
