@@ -4,36 +4,29 @@
 
 	const form_name = 'my_form_a';
 	const fields: IField[] = [
-		{
-			type: 'autocomplete', // required
-			name: 'name-field-autocomplete', // required
-			attributes: {
-				id: 'id-field-autocomplete',
-				classes: ['class1', 'class2'],
-				placeholder: 'Tap keyword...',
-				autocomplete: 'off'
+			{
+			"type": "file",
+			"name": "name-file",
+			"attributes": {
+				"id": "id-field",
+				"classes": [
+					"file-input file-input-bordered file-input-primary w-full",
+					"dropzone-file",
+					"cursor-pointer"
+				],
+				"label": "Upload File"
 			},
-			extra: {
-				filter_length: 2,
-				loadItemes: [
-					// list items with id and title attributes.
-					{
-						value: 1,
-						title: 'item 1'
-					},
-					{
-						value: 2,
-						title: 'item 2'
-					},
-					{
-						value: 3,
-						title: 'item 3'
-					},
-					{
-						value: 4,
-						title: 'item 4'
-					}
-				]
+			"extra": {
+				"multiple": true, 
+				"showPreview": true,
+				"iconConfig": {
+					"color": 'blue',
+				}
+			},
+			"rules": ["file"], 
+			"file": {
+				"extensions": ["jpg", "gif", "png"],
+				"maxSize": 5,
 			}
 		}
 	];

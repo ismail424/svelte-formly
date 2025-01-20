@@ -3,27 +3,6 @@
 
 	let loading: boolean = false;
 	const form_name = 'my_form_a';
-	const fields: IField[] = [
-		{
-			type: 'file', // required
-			name: 'name-file', // require
-			attributes: {
-				id: 'id-field', // optional
-				classes: ['form-control'], // optional
-				label: 'Image' // optional
-			},
-			extra: {
-				multiple: true, // optional
-				showPreview: true // optional
-			},
-			rules: ['file'],
-			file: {
-				// need to add this attribute object if you need a file rule
-				types: 'jpg,gif',
-				maxsize: 5
-			}
-		}
-	];
 
 	const form_name_b = 'my_form_b';
 	const fields_b: IField[] = [
@@ -71,7 +50,6 @@
 					></code
 				>
 			</p>
-			<Formly {fields} {form_name} on:submit={onSubmit} on:update={onUpdate} realtime={true} />
 		</article>
 	</div>
 	<div class="col">
@@ -84,5 +62,6 @@
 				realtime={true}
 			/>
 		</article>
+		<p>test</p>
 	</div>
 </div>

@@ -1,6 +1,6 @@
 {
   "name": "@ismail424/svelte-formly",
-  "version": "2.0.13",
+  "version": "2.0.16",
   "author": "Kamal Sahmoud",
   "contributors": [
     "Kamal Sahmoud"
@@ -48,7 +48,7 @@
     "@picocss/pico": "^1.5.3",
     "bulma": "^0.9.4",
     "open-props": "^1.4.3",
-    "svelte-formly-light": "^0.0.7"
+    "svelte-formly-light": "^0.0.10"
   },
   "keywords": [
     "svelte",
@@ -77,5 +77,8 @@
     "validation",
     "validators",
     "validator"
-  ]
+  ],
+  "peerDependencies": {
+    "svelte": "^3.44.0 || ^4.0.0"
+  }
 }
