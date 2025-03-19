@@ -2,212 +2,443 @@
     import { createEventDispatcher, onMount } from 'svelte';
     import type { IField } from '../../utils';
 
+    interface FileMetadataDetail {
+        icon: string;
+        text: string;
+    }
+
+    interface FileMetadataInfo {
+        icon: string;
+        color: string;
+        details: FileMetadataDetail[];
+    }
+
+    interface StoredFile {
+        name: string;
+        url: string;
+        path?: string;
+        type: string;
+        size: number;
+        isStoredFile: true;
+        fileId: string;
+        id?: string;
+        previewUrl?: string;
+    }
+
+    interface NewFile {
+        name: string;
+        type: string;
+        size: number;
+        blob: File;
+        fileId: string;
+        isStoredFile?: false;
+    }
+
+    type UploadFile = StoredFile | NewFile;
+
     export let field: IField;
 
-    let files: any[] = [];
+    let storedFiles: StoredFile[] = [];
+    let newFiles: NewFile[] = [];
     let multiple = false;
-    let showPreview = false;
-    let inputFile: any;
-
-    const dispatch = createEventDispatcher();
-    let iconConfig = {
-        color: 'currentColor',
-        opacity: 0.6,
-        strokeWidth: 2,
-        size: 'w-4 h-4',
-        additionalClasses: '',
-        additionalStyles: ''
-    };
+    let maxFiles = 1;
+    let inputFile: HTMLInputElement;
+    let errors: string[] = [];
+    const dispatch = createEventDispatcher<{
+        changeValue: { name: string; value: NewFile | NewFile[] | null };
+    }>();
+    let fileMetadata: Map<string, FileMetadataInfo> = new Map();
 
     onMount(() => {
-        try{
+        try {
             if (field.value) {
-                files = Array.isArray(field.value) ? field.value : [field.value];
+                storedFiles = processStoredFiles(field.value);
+                storedFiles.forEach(getFileMetadata);
             }
+            multiple = field.extra?.multiple || false;
+            maxFiles = field.file?.maxSize || 1;
         } catch (e) {
-            console.error(e);
-        }
-        
-        if (field.extra) {
-            multiple = field.extra.multiple ? field.extra.multiple : null;
-            showPreview = field.extra.showPreview ? field.extra.showPreview : null;
-
-            if (field.extra.iconConfig) {
-                iconConfig = {
-                    ...iconConfig,
-                    ...field.extra.iconConfig
-                };
-            }
+            console.error('Initialization error:', e);
+            errors = ['Failed to initialize file upload'];
         }
     });
 
-    function deleteFile(file: File) {
-        let newValue;
-        files = files.filter((i) => i.name != file.name);
-        if (files.length === 0) {
-            inputFile.value = null;
-            newValue = null;
-        } else {
-            newValue = files;
-        }
-
-        dispatch('changeValue', {
-            name: field.name,
-            value: newValue
-        });
+    function generateUniqueId(file: File | UploadFile, prefix = ''): string {
+        return `${prefix}-${file.name}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     }
+ 
+    function processStoredFiles(initialValue: any): StoredFile[] {
+        const fileArray = Array.isArray(initialValue) ? initialValue : [initialValue];
+        
+        return fileArray
+            .filter(value => value && (value.path || value.url || value.previewUrl || value.id))
+            .map(value => ({
+                name: value.name || value.filename || 'unnamed-file',
+                url: value.previewUrl || value.path || value.url || `/api/files/${value.id || value.fileId}`,
+                path: value.path,
+                type: value.type || value.mimeType || 'application/octet-stream',
+                size: value.size || 0,
+                isStoredFile: true as const,
+                fileId: value.fileId || value.id || generateUniqueId(value, 'stored'),
+                id: value.id || value.fileId
+            }));
+    }
+ 
+    function validateNewFile(file: UploadFile, totalCount: number): string | null {
+        const allowedExtensions = field.file?.extensions || [];
+        const maxSize = (field.file?.maxSize || 5) * 1024 * 1024;
+        
+        if (totalCount > maxFiles) {
+            return `Maximum ${maxFiles} files allowed (${storedFiles.length} already stored)`;
+        }
+        
+        const ext = (file.name?.split('.').pop() || '').toLowerCase();
+        if (allowedExtensions.length && !allowedExtensions.includes(ext)) {
+            return `Only ${allowedExtensions.join(', ')} files are allowed`;
+        }
+        
+        if (file.size > maxSize) {
+            return `File size must be less than ${(field.file?.maxSize || 0)}MB`;
+        }
+        
+        return null;
+    }
+ 
+    const onInput = async (event: Event) => {
+        errors = [];
+        const input = event.target as HTMLInputElement;
+        if (!input.files?.length) return;
+        
+        const uploadedFiles: NewFile[] = Array.from(input.files).map(file => ({
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            blob: file,
+            fileId: generateUniqueId(file, 'new')
+        }));
 
-    const onInput = async (
-        event: Event & { currentTarget: EventTarget & HTMLInputElement }
-    ): Promise<void> => {
-        files = Array.from(event.currentTarget.files as ArrayLike<File>);
+        console.log('Uploaded files:', uploadedFiles);
+        
+        const totalFilesCount = storedFiles.length + newFiles.length + uploadedFiles.length;
+        
+        if (totalFilesCount > maxFiles) {
+            errors.push(`Maximum ${maxFiles} files allowed (${storedFiles.length} already stored)`);
+            if (inputFile) inputFile.value = '';
+            return;
+        }
+        
+        for (const file of uploadedFiles) {
+            const error = validateNewFile(file, storedFiles.length + newFiles.length + 1);
+            if (error) {
+                errors.push(error);
+                if (inputFile) inputFile.value = '';
+                return;
+            }
+        }
+ 
+        if (multiple) {
+            newFiles = [...newFiles, ...uploadedFiles];
+        } else {
+            newFiles = uploadedFiles;
+        }
+ 
+        uploadedFiles.forEach(getFileMetadata);
+        
+        const dispatchFiles = newFiles.map(file => ({
+            ...file,
+            blob: file.blob
+        }));
 
         dispatch('changeValue', {
             name: field.name,
-            value: files
+            value: multiple ? dispatchFiles : dispatchFiles[0]
         });
     };
-    function formatFileSize(bytes: number) {
+
+    async function deleteStoredFile(file: StoredFile) {
+        errors = [];
+        
+        if (!file.isStoredFile) return;
+
+        const fileId = file.id || file.fileId;
+        if (!fileId) {
+            console.error('No file ID found:', file);
+            errors.push('Failed to delete file: No ID');
+            return;
+        }
+
+        try {
+            const formData = new FormData();
+            formData.append('fileUrl', fileId);
+            formData.append('fieldName', field.name);
+
+            const response = await fetch('?/delete', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to delete file');
+            }
+
+            storedFiles = storedFiles.filter((i) => i.fileId !== file.fileId);
+            fileMetadata.delete(file.fileId);
+        } catch (err) {
+            console.error('Error deleting file:', err);
+            errors.push('Failed to delete file');
+        }
+    }
+
+    function deleteNewFile(file: NewFile) {
+        newFiles = newFiles.filter((i) => i.fileId !== file.fileId);
+        fileMetadata.delete(file.fileId);
+        if (inputFile) inputFile.value = '';
+        
+        const dispatchFiles = newFiles.map(f => ({
+            ...f,
+            blob: f.blob
+        }));
+
+        dispatch('changeValue', {
+            name: field.name,
+            value: multiple ? dispatchFiles : (dispatchFiles[0] || null)
+        });
+    }
+ 
+    function getFileMetadata(file: UploadFile) {
+        if (!file?.name) return;
+
+        const metadata: FileMetadataInfo = {
+            icon: '📎',
+            color: 'text-gray-500',
+            details: []
+        };
+
+        const ext = file.name.split('.').pop()?.toLowerCase() || '';
+        const typeInfo = getFileTypeInfo(ext);
+        metadata.icon = typeInfo.icon;
+        metadata.color = typeInfo.color;
+
+        if (file.size) {
+            metadata.details.push({
+                icon: '📊',
+                text: formatFileSize(file.size)
+            });
+        }
+
+        if (file.type) {
+            metadata.details.push({
+                icon: '📄',
+                text: file.type.split('/')[1]?.toUpperCase() || 'UNKNOWN'
+            });
+        }
+
+        if (file.type?.startsWith('image/')) {
+            getImageResolution(file).then(res => {
+                metadata.details.push({
+                    icon: '📏',
+                    text: res
+                });
+                fileMetadata.set(file.fileId, metadata);
+                fileMetadata = fileMetadata;
+            });
+        }
+
+        fileMetadata.set(file.fileId, metadata);
+    }
+ 
+    interface FileTypeInfo {
+        icon: string;
+        color: string;
+    }
+
+    function getFileTypeInfo(ext: string): FileTypeInfo {
+        const types: Record<string, FileTypeInfo> = {
+            jpg: { icon: '🖼️', color: 'text-blue-500' },
+            jpeg: { icon: '🖼️', color: 'text-blue-500' },
+            png: { icon: '🖼️', color: 'text-blue-500' },
+            gif: { icon: '🖼️', color: 'text-purple-500' },
+            pdf: { icon: '📄', color: 'text-red-500' },
+            doc: { icon: '📝', color: 'text-blue-600' },
+            docx: { icon: '📝', color: 'text-blue-600' },
+            txt: { icon: '📄', color: 'text-gray-600' },
+            default: { icon: '📎', color: 'text-gray-500' }
+        };
+        return types[ext] || types.default;
+    }
+ 
+    function getImageResolution(file: UploadFile): Promise<string> {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.onload = function () {
+                resolve(`${img.naturalWidth} × ${img.naturalHeight}`);
+                URL.revokeObjectURL(img.src);
+            };
+            const fileUrl = 'isStoredFile' in file && file.isStoredFile 
+                ? file.url 
+                : URL.createObjectURL((file as NewFile).blob);
+            img.src = fileUrl;
+        });
+    }
+  
+    function formatFileSize(bytes: number): string {
         if (bytes === 0) return '0 Bytes';
         const k = 1024;
         const sizes = ['Bytes', 'KB', 'MB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
-    function getImageResolution(file: File): Promise<string> {
-        return new Promise((resolve) => {
-            const img = new Image();
-            img.onload = function() {
-                const resolution = `${img.naturalWidth} × ${img.naturalHeight}`;
-                resolve(resolution);
-            };
-            img.src = window.URL.createObjectURL(file);
-        });
-    }
-
-    let imageResolution = '';
-
-    $: {
-        if (files && files.length > 0 && files[0].type.startsWith('image/')) {
-            getImageResolution(files[0]).then(res => {
-                imageResolution = res;
-            });
-        }
-    }
 </script>
 
-<input
-    type={field.type}
-    name={field.name}
-    id={field.attributes.id}
-    class={field.attributes.classes?.join(' ')}
-    {multiple}
-    on:input={onInput}
-    bind:this={inputFile}
-/>
-
-{#if field.file}
-    <div class="file-rules">
-        <ul>
-            {#each Object.entries(field.file) as [rule, ruleValue]}
-                <li><strong>{rule}</strong>: {ruleValue}</li>
-            {/each}
-        </ul>
+<div class="w-full space-y-4">
+    <div class="flex items-center justify-between text-sm">
+        <div class="flex items-center gap-2">
+            <span class="opacity-70">Files:</span>
+            <span class="font-medium">{storedFiles.length + newFiles.length} / {maxFiles}</span>
+        </div>
+        {#if field.file}
+            <div class="flex items-center gap-2">
+                <span class="opacity-70">Max Size:</span>
+                <span class="font-medium">{field.file.maxSize}MB</span>
+            </div>
+        {/if}
     </div>
-{/if}
 
-{#if showPreview}
-    {#if files}
-        <div class="list-files">
-            {#each files as file, i}
-                <div class="file">
-                    <div class="img">
-                        <img src={window.URL.createObjectURL(file)} alt={file.name} />
-                    </div>
-                    <div class="infos">
-                        <div class="flex flex-col gap-2">
-                            <!-- Filename -->
-                            <div class="flex items-center gap-1">
-                                <svg 
-                                    class={`inline-block mr-1 opacity-${iconConfig.opacity * 100} ${iconConfig.size} ${iconConfig.additionalClasses}`} 
-                                    viewBox="0 0 24 24" 
-                                    fill="none" 
-                                    stroke={iconConfig.color} 
-                                    stroke-width={iconConfig.strokeWidth}
-                                    style={iconConfig.additionalStyles}
-                                >
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
-                                </svg>
-                                {file.name}
-                            </div>
-                            
-                            <!-- File details -->
-                            <div class="flex flex-wrap gap-3 text-sm text-base-content/60">
-                                <!-- File type -->
-                                <div class="flex items-center gap-1">
-                                    <svg 
-                                        class={`opacity-${iconConfig.opacity * 100} ${iconConfig.size} ${iconConfig.additionalClasses}`} 
-                                        viewBox="0 0 24 24" 
-                                        fill="none" 
-                                        stroke={iconConfig.color} 
-                                        stroke-width={iconConfig.strokeWidth}
-                                        style={iconConfig.additionalStyles}
-                                    >
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                                    </svg>
-                                    <span>{file.type}</span>
+    {#if errors.length > 0}
+        <div class="alert alert-error">
+            {#each errors as error}
+                <p>{error}</p>
+            {/each}
+        </div>
+    {/if}
+
+    {#if storedFiles.length > 0}
+        <div class="mb-4">
+            <h3 class="text-sm font-medium mb-2">Stored Files</h3>
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {#each storedFiles as file (file.fileId)}
+                    <div class="card bg-base-200 shadow-sm hover:shadow-md transition-shadow">
+                        <div class="p-3">
+                            {#if file.type?.startsWith('image/')}
+                                <div class="aspect-square w-full mb-2">
+                                    <img 
+                                        src={file.url} 
+                                        alt={file.name} 
+                                        class="w-full h-full object-contain bg-base-300 rounded"
+                                    />
                                 </div>
-                                
-                                <!-- File size -->
-                                <div class="flex items-center gap-1">
-                                    <svg 
-                                        class={`opacity-${iconConfig.opacity * 100} ${iconConfig.size} ${iconConfig.additionalClasses}`} 
-                                        viewBox="0 0 24 24" 
-                                        fill="none" 
-                                        stroke={iconConfig.color} 
-                                        stroke-width={iconConfig.strokeWidth}
-                                        style={iconConfig.additionalStyles}
-                                    >
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="m9 14.25 6-6m4.5-3.493V21.75l-3.75-3.75-3.75 3.75-3.75-3.75-3.75 3.75V4.757c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0c1.1.128 1.907 1.077 1.907 2.185ZM9.75 9h.008v.008H9.75V9Zm.375 0h.008v.008h-.008V9Zm.375 0h.008v.008h-.008V9Z" />
-                                    </svg>
-                                    <span>{formatFileSize(file.size)}</span>
+                            {:else}
+                                <div class="aspect-square w-full mb-2 flex items-center justify-center bg-base-300 rounded text-2xl">
+                                    {(fileMetadata.get(file.fileId) || {}).icon || '📎'}
                                 </div>
-                                
-                                <!-- Resolution for images -->
-                                {#if file.type.startsWith('image/')}
-                                    <div class="flex items-center gap-1">
-                                        <svg 
-                                            class={`opacity-${iconConfig.opacity * 100} ${iconConfig.size} ${iconConfig.additionalClasses}`} 
-                                            viewBox="0 0 24 24" 
-                                            fill="none" 
-                                            stroke={iconConfig.color} 
-                                            stroke-width={iconConfig.strokeWidth}
-                                            style={iconConfig.additionalStyles}
-                                        >
-                                            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0h.008v.008h-.008V8.25zm-.375.375h.008v.008h-.008V8.625zm.375 0h.008v.008h-.008V8.625z" />
-                                        </svg>
-                                        <span>{imageResolution}</span>
+                            {/if}
+
+                            <div class="space-y-1">
+                                <p class="text-xs font-medium truncate {(fileMetadata.get(file.fileId) || {}).color}" title={file.name}>
+                                    {file.name}
+                                </p>
+                                {#if fileMetadata.get(file.fileId)?.details}
+                                    <div class="grid grid-cols-2 gap-1 text-[10px] opacity-70">
+                                        {#each fileMetadata.get(file.fileId)?.details || [] as detail}
+                                            <div class="flex items-center gap-1" title={detail.text}>
+                                                <span>{detail.icon}</span>
+                                                <span class="truncate">{detail.text}</span>
+                                            </div>
+                                        {/each}
                                     </div>
                                 {/if}
-                            </div>
-                    
-                            <!-- Remove button -->
-                            <div>
                                 <button
+                                    type="button"
+                                    class="btn btn-xs btn-error btn-outline w-full mt-2"
+                                    on:click={() => deleteStoredFile(file)}
+                                >
+                                    Remove
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                {/each}
+            </div>
+        </div>
+    {/if}
+
+    <div class="flex flex-col gap-2">
+        <input
+            type="file"
+            name={field.name}
+            id={field.attributes?.id}
+            class={field.attributes?.classes?.join(' ')}
+            {multiple}
+            on:change={onInput}
+            bind:this={inputFile}
+            accept={field.file?.extensions ? '.' + field.file.extensions.join(',.') : undefined}
+            disabled={storedFiles.length + newFiles.length >= maxFiles}
+        />
+        
+        <div class="text-xs opacity-70 space-y-1">
+            {#if field.file}
+                <p>Allowed: {field.file?.extensions?.join(', ') ?? 'None'}</p>
+            {/if}
+            {#if multiple}
+                <p>
+                    {#if storedFiles.length + newFiles.length >= maxFiles}
+                        Maximum file limit reached ({maxFiles} files)
+                    {:else}
+                        Can add {maxFiles - (storedFiles.length + newFiles.length)} more file(s)
+                    {/if}
+                </p>
+            {/if}
+        </div>
+    </div>
+
+    {#if newFiles.length > 0}
+    <div class="mt-4">
+        <h3 class="text-sm font-medium mb-2">New Files</h3>
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {#each newFiles as file (file.fileId)}
+                <div class="card bg-base-200 shadow-sm hover:shadow-md transition-shadow">
+                    <div class="p-3">
+                        {#if file.type?.startsWith('image/')}
+                            <div class="aspect-square w-full mb-2">
+                                <img 
+                                    src={URL.createObjectURL(file.blob)} 
+                                    alt={file.name} 
+                                    class="w-full h-full object-contain bg-base-300 rounded"
+                                />
+                            </div>
+                        {:else}
+                            <div class="aspect-square w-full mb-2 flex items-center justify-center bg-base-300 rounded text-2xl">
+                                {(fileMetadata.get(file.fileId) || {}).icon || '📎'}
+                            </div>
+                        {/if}
+
+                        <div class="space-y-1">
+                            <p class="text-xs font-medium truncate {(fileMetadata.get(file.fileId) || {}).color}" title={file.name}>
+                                {file.name}
+                            </p>
+                            <!-- File Metadata -->
+                            {#if fileMetadata.get(file.fileId)?.details}
+                                <div class="grid grid-cols-2 gap-1 text-[10px] opacity-70">
+                                    {#each fileMetadata.get(file.fileId)?.details || [] as detail}
+                                        <div class="flex items-center gap-1" title={detail.text}>
+                                            <span>{detail.icon}</span>
+                                            <span class="truncate">{detail.text}</span>
+                                        </div>
+                                    {/each}
+                                </div>
+                            {/if}
+                            <button
                                 type="button"
-                                class="btn btn-sm btn-error btn-outline w-full sm:w-auto"
-                                on:click|preventDefault={() => deleteFile(file)}
+                                class="btn btn-xs btn-error btn-outline w-full mt-2"
+                                on:click={() => deleteNewFile(file)}
                             >
-                                <svg class="w-4 h-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                                </svg>
                                 Remove
                             </button>
-                            </div>
                         </div>
                     </div>
                 </div>
             {/each}
         </div>
-    {/if}
+    </div>
 {/if}
+</div>
