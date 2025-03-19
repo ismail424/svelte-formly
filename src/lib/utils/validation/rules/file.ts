@@ -16,8 +16,19 @@ export function bytesToSize(bytes: any) {
  * @param {file} file.
  */
 export function getFileExtension(file: File) {
-	const filenameParts = file.name.split('.');
-	return filenameParts[filenameParts.length - 1].toLowerCase();
+    // Check if file exists and has a name property
+    if (!file || !file.name) {
+        return '';
+    }
+    
+    const filenameParts = file.name.split('.');
+    
+    // If there's only one part (no dots) or empty filename, return empty string
+    if (filenameParts.length <= 1) {
+        return '';
+    }
+    
+    return filenameParts[filenameParts.length - 1].toLowerCase();
 }
 
 /**
